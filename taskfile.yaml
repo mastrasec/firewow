@@ -1,0 +1,34 @@
+version: 3
+
+vars:
+  DECISIONS_DIR: docs/decisions
+
+tasks:
+  run:
+    desc: run firewow with hot reload
+    cmds:
+      - air -c .air.conf
+  test:
+    desc: run automated tests
+    cmds:
+      - go test {{.CLI_ARGS | default "./..."}} -shuffle=on -race
+
+  # ************************************************************************** #
+  #                       Architectural Decision Records                       #
+  # ************************************************************************** #
+
+  adr:init:
+    desc: initializes adr directory if it does not exist
+    cmds:
+      - adr init {{.DECISIONS_DIR}}
+    silent: true
+    status:
+      # skip execution when the below already exist
+      - test -d {{.DECISIONS_DIR}}
+      - test -f .adr-dir
+  
+  adr:new:
+    desc: creates adr
+    cmds:
+      - adr new {{.CLI_ARGS}}
+    silent: true
