@@ -1,10 +1,11 @@
 package client
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/brianvoe/gofakeit/v6"
@@ -12,15 +13,44 @@ import (
 )
 
 func TestGetbody(t *testing.T) {
-	var (
-		want        = []byte(gofakeit.LoremIpsumWord())
-		inputReader = strings.NewReader(string(want))
-		data        = io.NopCloser(inputReader)
-	)
+	testCases := []struct {
+		name            string
+		contentEncoding string
+		body            []byte
+	}{
+		{
+			name:            "raw data",
+			contentEncoding: "",
+			body:            []byte("raw data"),
+		},
+		{
+			name:            "gzipped data",
+			contentEncoding: "gzip",
+			body:            []byte("gzipped data"),
+		},
+	}
 
-	got, err := getBody(data)
-	assert.NoError(t, err)
-	assert.Equal(t, want, got)
+	for _, tc := range testCases {
+		buf := &bytes.Buffer{}
+
+		if tc.contentEncoding == "gzip" {
+			writer := gzip.NewWriter(buf)
+			_, err := writer.Write(tc.body)
+			assert.NoError(t, err)
+			writer.Close()
+		} else {
+			buf = bytes.NewBuffer(tc.body)
+		}
+
+		res := &http.Response{
+			Body:   io.NopCloser(buf),
+			Header: http.Header{"Content-Encoding": []string{tc.contentEncoding}},
+		}
+
+		got, err := getBody(res)
+		assert.NoError(t, err)
+		assert.Equal(t, tc.body, got)
+	}
 }
 
 func TestPost(t *testing.T) {
@@ -84,7 +114,7 @@ func TestPost(t *testing.T) {
 		},
 	}
 
-	client := New()
+	client := New(&http.Client{})
 
 	for _, tc := range testCases {
 		t.Run(

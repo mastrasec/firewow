@@ -1,6 +1,8 @@
 package entrypoint
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"time"
@@ -22,7 +24,7 @@ func New(addr string, svc service.Contract) *Entry {
 		server: &http.Server{
 			Addr:         addr,
 			Handler:      mux,
-			WriteTimeout: 2 * time.Second,
+			WriteTimeout: 10 * time.Second,
 		},
 		mux: mux,
 	}
@@ -53,7 +55,12 @@ func (entry *Entry) oaiV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if _, err := w.Write(resBody); err != nil {
+	res, err := gzipCompression(resBody)
+	if err != nil {
+		return
+	}
+
+	if _, err := w.Write(res); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -77,4 +84,19 @@ func getBody(data io.ReadCloser) ([]byte, error) {
 	defer data.Close()
 
 	return body, nil
+}
+
+func gzipCompression(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+
+	if _, err := writer.Write(data); err != nil {
+		return nil, err
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

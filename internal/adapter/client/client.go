@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 )
@@ -18,10 +19,9 @@ type HTTPClient struct {
 	client *http.Client
 }
 
-func New() *HTTPClient {
+func New(client *http.Client) *HTTPClient {
 	return &HTTPClient{
-		// TODO: Object pool.
-		client: &http.Client{},
+		client: client,
 	}
 }
 
@@ -49,7 +49,7 @@ func (hc *HTTPClient) Post(
 
 	resHeaders = map[string][]string(res.Header)
 
-	resBody, err = getBody(res.Body)
+	resBody, err = getBody(res)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -57,12 +57,32 @@ func (hc *HTTPClient) Post(
 	return resHeaders, resBody, nil
 }
 
-func getBody(data io.ReadCloser) ([]byte, error) {
-	body, err := io.ReadAll(data)
+func getBody(res *http.Response) ([]byte, error) {
+	if res.Header.Get("Content-Encoding") == "gzip" {
+		return gzipBody(res)
+	}
+
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer data.Close()
+	defer res.Body.Close()
+
+	return body, nil
+}
+
+func gzipBody(res *http.Response) ([]byte, error) {
+	reader, err := gzip.NewReader(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
 
 	return body, nil
 }
